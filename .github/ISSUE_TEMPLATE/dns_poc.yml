@@ -1,29 +1,38 @@
-name: "DNS POC"
-description: "Create/Update a Route53 record (POC)"
-title: "[POC DNS] <create|update> <type> <name> in <zone>"
-labels: ["poc", "dns"]
 body:
+  - type: dropdown
+    id: mode
+    attributes: { label: Mode, options: ["single", "bulk"] }
+    validations: { required: true }
+
+  # ---- SINGLE fields (as before) ----
   - type: dropdown
     id: action
     attributes: { label: Action, options: ["create","update"] }
-    validations: { required: true }
+    validations: { required: false }
   - type: input
     id: zone
     attributes: { label: "Zone (must end with .)", placeholder: "example.com." }
-    validations: { required: true }
   - type: input
     id: name
     attributes: { label: "Record name (relative or FQDN)", placeholder: "www" }
-    validations: { required: true }
   - type: dropdown
     id: type
     attributes: { label: "Type", options: ["A","AAAA","CNAME","TXT","MX"] }
-    validations: { required: true }
   - type: input
     id: ttl
     attributes: { label: "TTL (s)", placeholder: "300" }
-    validations: { required: true }
   - type: textarea
     id: values
     attributes: { label: "Values (one per line)", render: text }
-    validations: { required: true }
+
+  # ---- BULK block (YAML or JSON list) ----
+  - type: textarea
+    id: bulk_records
+    attributes:
+      label: "Bulk records (YAML or JSON list)"
+      description: |
+        Example (YAML):
+        records:
+          - { action: create, zone: example.com., name: www,  type: CNAME, ttl: 300, values: ["target1.example.net."] }
+          - { action: update, zone: example.com., name: api,  type: A,     ttl: 60,  values: ["10.0.1.20","10.0.1.21"] }
+      render: yaml
