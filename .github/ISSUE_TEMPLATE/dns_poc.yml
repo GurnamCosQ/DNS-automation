@@ -1,38 +1,57 @@
+name: "DNS POC"
+description: "Create/Update Route53 records (single or bulk) for the POC"
+title: "[POC DNS] <create|update> <type> <name> in <zone>"
+labels: ["dns", "poc"]
+assignees: []
 body:
   - type: dropdown
     id: mode
-    attributes: { label: Mode, options: ["single", "bulk"] }
-    validations: { required: true }
+    attributes:
+      label: Mode
+      options: ["single", "bulk"]
+    validations:
+      required: true
 
-  # ---- SINGLE fields (as before) ----
+  # --- SINGLE RECORD FIELDS ---
   - type: dropdown
     id: action
-    attributes: { label: Action, options: ["create","update"] }
-    validations: { required: false }
+    attributes:
+      label: Action
+      options: ["create","update"]
   - type: input
     id: zone
-    attributes: { label: "Zone (must end with .)", placeholder: "example.com." }
+    attributes:
+      label: Zone (must end with a dot)
+      placeholder: example.com.
   - type: input
     id: name
-    attributes: { label: "Record name (relative or FQDN)", placeholder: "www" }
+    attributes:
+      label: Record name (relative or FQDN)
+      placeholder: www
   - type: dropdown
     id: type
-    attributes: { label: "Type", options: ["A","AAAA","CNAME","TXT","MX"] }
+    attributes:
+      label: Type
+      options: ["A","AAAA","CNAME","TXT","MX"]
   - type: input
     id: ttl
-    attributes: { label: "TTL (s)", placeholder: "300" }
+    attributes:
+      label: TTL (seconds)
+      placeholder: "300"
   - type: textarea
     id: values
-    attributes: { label: "Values (one per line)", render: text }
+    attributes:
+      label: Values (one per line)
+      render: text
 
-  # ---- BULK block (YAML or JSON list) ----
+  # --- BULK RECORDS (YAML or JSON) ---
   - type: textarea
     id: bulk_records
     attributes:
-      label: "Bulk records (YAML or JSON list)"
+      label: Bulk records (YAML or JSON list)
       description: |
         Example (YAML):
-        records:
-          - { action: create, zone: example.com., name: www,  type: CNAME, ttl: 300, values: ["target1.example.net."] }
-          - { action: update, zone: example.com., name: api,  type: A,     ttl: 60,  values: ["10.0.1.20","10.0.1.21"] }
+          records:
+            - { action: create, zone: example.com., name: www, type: CNAME, ttl: 300, values: ["target1.example.net."] }
+            - { action: update, zone: example.com., name: api, type: A, ttl: 60, values: ["10.0.1.20","10.0.1.21"] }
       render: yaml
