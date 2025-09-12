@@ -23,14 +23,12 @@ jobs:
         with:
           script: |
             const body = context.payload.issue.body || "";
-
-            // Extract the text under "### <label>" up to the next "###" (or end)
+      
+            // Grab text under "### <label>" until the next "###" (or EOF)
             function pick(label) {
-              const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex
+              const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
               const rx = new RegExp(
-                `(^|\\r?\\n)###\\s*${esc}\\s*\\r?\\n` +   // heading line
-                `([\\s\\S]*?)` +                          // value (non-greedy)
-                `(?=\\r?\\n###\\s|$)`,                    // stop before next heading or EOF
+                `(^|\\r?\\n)###\\s*${esc}\\s*\\r?\\n([\\s\\S]*?)(?=\\r?\\n###\\s|$)`,
                 'i'
               );
               const m = body.match(rx);
@@ -38,23 +36,34 @@ jobs:
               if (/^(no response|none)$/i.test(v)) v = "";
               return v;
             }
-
+      
+            // Remove ```lang and trailing ``` if present
+            function unfence(s) {
+              if (!s) return s;
+              const lines = s.split(/\r?\n/);
+              if (lines[0] && lines[0].startsWith("```")) lines.shift();
+              while (lines.length && lines[lines.length - 1].trim() === "```") lines.pop();
+              return lines.join("\n").trim();
+            }
+      
             const action   = (pick("Action") || "create").toLowerCase();
             const zone     = pick("Zone (must end with a dot)") || pick("Zone") || "";
             const name     = pick("Record name (relative or FQDN)") || pick("Record name") || "";
             const type     = (pick("Type") || "").toUpperCase();
             const variant  = (pick("Record variant") || "standard").toLowerCase();
             const ttlRaw   = pick("TTL (seconds)") || pick("TTL");
-            const values   = (pick("Values (one per line)") || pick("Values") || "")
-                              .split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-
+      
+            // Values may be fenced; unfence first, then split lines
+            const valuesText = unfence(pick("Values (one per line)") || pick("Values") || "");
+            const values = valuesText.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      
             const alias_target   = pick("Alias target DNS name");
             const alias_zone_id  = pick("Alias target hosted zone ID");
             const alias_eth_raw  = pick("Evaluate target health");
             const alias_eth      = /^true$/i.test(alias_eth_raw);
-
+      
             const snow_id = (pick("SNOW Request/Task ID") || "").replace(/\s+/g, "");
-
+      
             const payload = { action, zone, name, type, variant, snow_id };
             if (variant === "alias") {
               payload.alias_target = alias_target;
@@ -64,18 +73,18 @@ jobs:
               if (ttlRaw && /^\d+$/.test(ttlRaw)) payload.ttl = parseInt(ttlRaw, 10);
               payload.values = values;
             }
-
-            // Fail fast on missing critical fields
+      
+            // Minimal validation
             const missing = [];
             if (!payload.zone)  missing.push("zone");
             if (!payload.name)  missing.push("name");
             if (!payload.type)  missing.push("type");
             if (!payload.snow_id) missing.push("snow_id");
             if (variant === "alias") {
-              if (!alias_target)  missing.push("alias_target");
-              if (!alias_zone_id) missing.push("alias_zone_id");
-            } else {
-              if (!payload.values || payload.values.length === 0) missing.push("values");
+              if (!payload.alias_target)  missing.push("alias_target");
+              if (!payload.alias_zone_id) missing.push("alias_zone_id");
+            } else if (!payload.values?.length) {
+              missing.push("values");
             }
             if (missing.length) {
               core.setFailed("Missing required fields: " + missing.join(", "));
@@ -83,7 +92,7 @@ jobs:
               core.info(body);
               return;
             }
-
+      
             core.info("Payload to send: " + JSON.stringify(payload));
             core.setOutput("payload", JSON.stringify(payload));
 
