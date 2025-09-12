@@ -1,57 +1,108 @@
-name: "DNS POC"
-description: "Create/Update Route53 records (single or bulk) for the POC"
+name: "DNS POC (Single)"
+description: "Create/Update a Route 53 record (supports Alias)"
 title: "[POC DNS] <create|update> <type> <name> in <zone>"
 labels: ["dns", "poc"]
 assignees: []
 body:
   - type: dropdown
-    id: mode
-    attributes:
-      label: Mode
-      options: ["single", "bulk"]
-    validations:
-      required: true
-
-  # --- SINGLE RECORD FIELDS ---
-  - type: dropdown
     id: action
     attributes:
       label: Action
       options: ["create","update"]
+      description: "We’ll implement Create first; Update follows later."
+    validations:
+      required: true
+
   - type: input
     id: zone
     attributes:
       label: Zone (must end with a dot)
       placeholder: example.com.
+      description: "Hosted zone FQDN, e.g., example.com."
+    validations:
+      required: true
+
   - type: input
     id: name
     attributes:
       label: Record name (relative or FQDN)
       placeholder: www
+      description: "Use relative (e.g., www) or FQDN (e.g., www.example.com.)."
+    validations:
+      required: true
+
   - type: dropdown
     id: type
     attributes:
       label: Type
-      options: ["A","AAAA","CNAME","TXT","MX"]
+      options: ["A","AAAA","CNAME","MX","TXT","NS"]
+      description: "Alias is only valid with A/AAAA."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: variant
+    attributes:
+      label: Record variant
+      options: ["standard","alias"]
+      description: "Choose 'alias' for ALB/CloudFront/etc. targets (A/AAAA only)."
+    validations:
+      required: true
+
+  # ----- STANDARD FIELDS -----
   - type: input
     id: ttl
     attributes:
       label: TTL (seconds)
       placeholder: "300"
+      description: "Leave blank for alias records (TTL not used with alias)."
+    validations:
+      required: false
+
   - type: textarea
     id: values
     attributes:
       label: Values (one per line)
-      render: text
-
-  # --- BULK RECORDS (YAML or JSON) ---
-  - type: textarea
-    id: bulk_records
-    attributes:
-      label: Bulk records (YAML or JSON list)
       description: |
-        Example (YAML):
-          records:
-            - { action: create, zone: example.com., name: www, type: CNAME, ttl: 300, values: ["target1.example.net."] }
-            - { action: update, zone: example.com., name: api, type: A, ttl: 60, values: ["10.0.1.20","10.0.1.21"] }
-      render: yaml
+        A/AAAA: one IP per line
+        CNAME: single FQDN ending with a dot (e.g., target.example.net.)
+        MX: one per line as "priority host." (e.g., 10 mail.example.com.)
+        TXT: one string per line (SPF/DKIM)
+        NS: one nameserver per line, FQDN with trailing dot
+      render: text
+    validations:
+      required: false
+
+  # ----- ALIAS FIELDS -----
+  - type: input
+    id: alias_target
+    attributes:
+      label: Alias target DNS name
+      placeholder: d123.cloudfront.net.
+      description: "FQDN of the AWS target (must end with a dot). A/AAAA only."
+    validations:
+      required: false
+
+  - type: input
+    id: alias_zone_id
+    attributes:
+      label: Alias target hosted zone ID
+      placeholder: Z2FDTNDATAQYW2
+      description: "AWS hosted zone ID of the target (e.g., CloudFront: Z2FDTNDATAQYW2)."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: alias_eth
+    attributes:
+      label: Evaluate target health
+      options: ["false","true"]
+      description: "Route 53 alias setting: evaluate_target_health."
+    validations:
+      required: false
+
+  - type: textarea
+    id: justification
+    attributes:
+      label: Business justification (optional)
+      render: text
