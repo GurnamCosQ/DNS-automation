@@ -59,7 +59,7 @@ jobs:
         with:
           github-token: ${{ secrets.TFSEC_WORKFLOW_TOKEN }}
           script: |
-            const owner = '<YOUR_GH_USERNAME>';   // <-- change this
+            const owner = context.repo.owner;   // <-- change this
             const repo  = 'tf-security';          // <-- target repo name
             const workflow_id = 'dns-create-main.yml';
             await github.rest.actions.createWorkflowDispatch({
