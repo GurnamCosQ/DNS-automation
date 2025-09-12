@@ -2,56 +2,89 @@ name: Dispatch DNS Create to tf-security
 
 on:
   issues:
-    types: [opened, edited, labeled]
+    types: [opened, edited, reopened]
 
 permissions:
   issues: read
 
 jobs:
   dispatch:
-    # Require the 'dns' (or 'poc') label to avoid triggering on unrelated issues
-    if: startsWith(github.event.issue.title, '[POC DNS]')
     runs-on: ubuntu-latest
     steps:
+      - name: Debug event
+        run: |
+          echo "event_name=${{ github.event_name }}"
+          echo "issue_number=${{ github.event.issue.number }}"
+          echo "issue_title=${{ github.event.issue.title }}"
+
       - name: Build payload from Issue Form body
         id: build
         uses: actions/github-script@v7
         with:
           script: |
             const body = context.payload.issue.body || "";
-            // naive pickers: adjust label text if you changed form labels
-            const pick = (label) => {
-              const rx = new RegExp(`${label}\\s*\\n\\s*([\\s\\S]*?)(?:\\n\\n|$)`, 'i');
+
+            // Extract the text under "### <label>" up to the next "###" (or end)
+            function pick(label) {
+              const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex
+              const rx = new RegExp(
+                `(^|\\r?\\n)###\\s*${esc}\\s*\\r?\\n` +   // heading line
+                `([\\s\\S]*?)` +                          // value (non-greedy)
+                `(?=\\r?\\n###\\s|$)`,                    // stop before next heading or EOF
+                'i'
+              );
               const m = body.match(rx);
-              return (m && m[1].trim()) || "";
-            };
-            const action  = pick("Action");
-            const zone    = pick("Zone").replace(/`/g,'');
-            const name    = pick("Record name");
-            const type    = pick("Type");
-            const variant = pick("Record variant") || "standard";
-            const ttl     = pick("TTL").replace(/\D/g,''); // digits only
-            const values  = (pick("Values") || "").split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-            const alias_target = pick("Alias target DNS name");
-            const alias_zone_id = pick("Alias target hosted zone ID");
-            const alias_eth = /true/i.test(pick("Evaluate target health") || "false");
-            const snow_id = pick("SNOW Request/Task ID").replace(/\s+/g,'');
-            const payload = {
-              action: action.toLowerCase() || "create",
-              zone,
-              name,
-              type,
-              variant: variant.toLowerCase() || "standard",
-              snow_id
-            };
-            if (payload.variant === "alias") {
+              let v = (m && m[2].trim()) || "";
+              if (/^(no response|none)$/i.test(v)) v = "";
+              return v;
+            }
+
+            const action   = (pick("Action") || "create").toLowerCase();
+            const zone     = pick("Zone (must end with a dot)") || pick("Zone") || "";
+            const name     = pick("Record name (relative or FQDN)") || pick("Record name") || "";
+            const type     = (pick("Type") || "").toUpperCase();
+            const variant  = (pick("Record variant") || "standard").toLowerCase();
+            const ttlRaw   = pick("TTL (seconds)") || pick("TTL");
+            const values   = (pick("Values (one per line)") || pick("Values") || "")
+                              .split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+
+            const alias_target   = pick("Alias target DNS name");
+            const alias_zone_id  = pick("Alias target hosted zone ID");
+            const alias_eth_raw  = pick("Evaluate target health");
+            const alias_eth      = /^true$/i.test(alias_eth_raw);
+
+            const snow_id = (pick("SNOW Request/Task ID") || "").replace(/\s+/g, "");
+
+            const payload = { action, zone, name, type, variant, snow_id };
+            if (variant === "alias") {
               payload.alias_target = alias_target;
               payload.alias_zone_id = alias_zone_id;
               payload.alias_eth = alias_eth;
             } else {
-              if (ttl) payload.ttl = parseInt(ttl, 10);
+              if (ttlRaw && /^\d+$/.test(ttlRaw)) payload.ttl = parseInt(ttlRaw, 10);
               payload.values = values;
             }
+
+            // Fail fast on missing critical fields
+            const missing = [];
+            if (!payload.zone)  missing.push("zone");
+            if (!payload.name)  missing.push("name");
+            if (!payload.type)  missing.push("type");
+            if (!payload.snow_id) missing.push("snow_id");
+            if (variant === "alias") {
+              if (!alias_target)  missing.push("alias_target");
+              if (!alias_zone_id) missing.push("alias_zone_id");
+            } else {
+              if (!payload.values || payload.values.length === 0) missing.push("values");
+            }
+            if (missing.length) {
+              core.setFailed("Missing required fields: " + missing.join(", "));
+              core.info("Raw body for debugging below:");
+              core.info(body);
+              return;
+            }
+
+            core.info("Payload to send: " + JSON.stringify(payload));
             core.setOutput("payload", JSON.stringify(payload));
 
       - name: Dispatch workflow in tf-security
@@ -59,8 +92,8 @@ jobs:
         with:
           github-token: ${{ secrets.TFSEC_WORKFLOW_TOKEN }}
           script: |
-            const owner = context.repo.owner;   // <-- change this
-            const repo  = 'tf-security';          // <-- target repo name
+            const owner = context.repo.owner;   // same owner as form repo; change if needed
+            const repo  = 'tf-security';        // target repo
             const workflow_id = 'dns-create-main.yml';
             await github.rest.actions.createWorkflowDispatch({
               owner, repo, workflow_id,
