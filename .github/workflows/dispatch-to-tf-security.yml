@@ -1,0 +1,69 @@
+name: Dispatch DNS Create to tf-security
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+permissions:
+  issues: read
+
+jobs:
+  dispatch:
+    # Require the 'dns' (or 'poc') label to avoid triggering on unrelated issues
+    if: contains(github.event.issue.labels.*.name, 'dns')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build payload from Issue Form body
+        id: build
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || "";
+            // naive pickers: adjust label text if you changed form labels
+            const pick = (label) => {
+              const rx = new RegExp(`${label}\\s*\\n\\s*([\\s\\S]*?)(?:\\n\\n|$)`, 'i');
+              const m = body.match(rx);
+              return (m && m[1].trim()) || "";
+            };
+            const action  = pick("Action");
+            const zone    = pick("Zone").replace(/`/g,'');
+            const name    = pick("Record name");
+            const type    = pick("Type");
+            const variant = pick("Record variant") || "standard";
+            const ttl     = pick("TTL").replace(/\D/g,''); // digits only
+            const values  = (pick("Values") || "").split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+            const alias_target = pick("Alias target DNS name");
+            const alias_zone_id = pick("Alias target hosted zone ID");
+            const alias_eth = /true/i.test(pick("Evaluate target health") || "false");
+            const snow_id = pick("SNOW Request/Task ID").replace(/\s+/g,'');
+            const payload = {
+              action: action.toLowerCase() || "create",
+              zone,
+              name,
+              type,
+              variant: variant.toLowerCase() || "standard",
+              snow_id
+            };
+            if (payload.variant === "alias") {
+              payload.alias_target = alias_target;
+              payload.alias_zone_id = alias_zone_id;
+              payload.alias_eth = alias_eth;
+            } else {
+              if (ttl) payload.ttl = parseInt(ttl, 10);
+              payload.values = values;
+            }
+            core.setOutput("payload", JSON.stringify(payload));
+
+      - name: Dispatch workflow in tf-security
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.TFSEC_WORKFLOW_TOKEN }}
+          script: |
+            const owner = '<YOUR_GH_USERNAME>';   // <-- change this
+            const repo  = 'tf-security';          // <-- target repo name
+            const workflow_id = 'dns-create-main.yml';
+            await github.rest.actions.createWorkflowDispatch({
+              owner, repo, workflow_id,
+              ref: 'main',
+              inputs: { payload_json: '${{ steps.build.outputs.payload }}' }
+            });
