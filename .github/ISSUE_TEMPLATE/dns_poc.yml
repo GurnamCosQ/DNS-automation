@@ -4,6 +4,15 @@ title: "[POC DNS] <create|update> <type> <name> in <zone>"
 labels: ["dns", "poc"]
 assignees: []
 body:
+  - type: input
+    id: snow_id
+    attributes:
+      label: SNOW Request/Task ID
+      placeholder: RITM0123456 or TASK0123456
+      description: "Your ServiceNow request/task (e.g., RITM/TASK/CHG)."
+    validations:
+      required: true
+
   - type: dropdown
     id: action
     attributes:
@@ -107,11 +116,3 @@ body:
       label: Business justification (optional)
       render: text
  
-  - type: input
-    id: snow_id
-    attributes:
-      label: SNOW Request/Task ID
-      placeholder: RITM0123456 or TASK0123456
-      description: "Your ServiceNow request/task (e.g., RITM/TASK/CHG)."
-    validations:
-      required: true
