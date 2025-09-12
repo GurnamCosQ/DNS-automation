@@ -10,7 +10,7 @@ permissions:
 jobs:
   dispatch:
     # Require the 'dns' (or 'poc') label to avoid triggering on unrelated issues
-    if: contains(github.event.issue.labels.*.name, 'dns')
+    if: startsWith(github.event.issue.title, '[POC DNS]')
     runs-on: ubuntu-latest
     steps:
       - name: Build payload from Issue Form body
