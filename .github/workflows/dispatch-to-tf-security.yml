@@ -31,8 +31,16 @@ jobs:
               const rx = new RegExp(`(^|\\r?\\n)###\\s*${esc}\\s*\\r?\\n([\\s\\S]*?)(?=\\r?\\n###\\s|$)`, 'i');
               const m = body.match(rx);
               let v = (m && m[2].trim()) || "";
-              if (/^(no response|none)$/i.test(v)) v = "";
               return v;
+            }
+            function stripMd(s) {
+              return (s || "").replace(/```[\s\S]*?```/g, "")  // strip fenced blocks entirely
+                              .replace(/[`*_~]/g, "")          // remove md emphasis/backticks/tilde
+                              .trim();
+            }
+            function emptyish(s) {
+              const v = stripMd(s).toLowerCase();
+              return !v || ["no response","none","n/a","na","null"].includes(v);
             }
             function unfence(s) {
               if (!s) return s;
@@ -42,57 +50,56 @@ jobs:
               return lines.join("\n").trim();
             }
             function linesOf(s) {
-              return unfence(s || "").split(/\r?\n/).map(t => t.trim()).filter(Boolean);
-            }
-            function boolOrNull(s) {
-              if (!s) return null;
-              if (/^true$/i.test(s)) return true;
-              if (/^false$/i.test(s)) return false;
-              return null;
+              return (unfence(s) || "")
+                .split(/\r?\n/)
+                .map(t => stripMd(t))
+                .filter(t => !emptyish(t));
             }
             function ensureDot(s) {
               if (!s) return s;
               return s.endsWith(".") ? s : s + ".";
             }
             function fqdnName(zone, name) {
-              const z = ensureDot(zone || "");
-              const n = (name || "").trim();
+              const z = ensureDot(stripMd(zone || ""));
+              const n = stripMd(name || "");
               if (!n) return n;
-              if (n.endsWith(".")) return n;                 // already FQDN
-              if (n.includes(".")) return n + ".";           // looks FQDN but missing dot
-              return n + "." + z;                            // relative -> append zone
+              if (n.endsWith(".")) return n;          // already FQDN
+              if (n.includes(".")) return n + ".";    // looks FQDN but missing dot
+              return n + "." + z;                     // relative -> append zone
             }
 
             // --- gather inputs ---
-            const action     = (section("Action") || "create").toLowerCase();
-            const zone       = section("Zone (must end with a dot)") || section("Zone") || "";
-            const nameInput  = section("Record name (relative or FQDN)") || section("Record name") || "";
-            const currentType= (section("Type (CURRENT type for updates)") || section("Type") || "").toUpperCase();
-            const variant    = (section("Variant (create) / New variant (update, optional)") || section("Record variant") || "standard").toLowerCase();
+            const action      = (stripMd(section("Action")) || "create").toLowerCase();
+            const zoneRaw     = section("Zone (must end with a dot)") || section("Zone") || "";
+            const nameInput   = section("Record name (relative or FQDN)") || section("Record name") || "";
+            const currentType = (stripMd(section("Type (CURRENT type for updates)") || section("Type") || "")).toUpperCase();
+            const variant     = (stripMd(section("Variant (create) / New variant (update, optional)") || section("Record variant") || "standard")).toLowerCase();
 
-            const ttlRaw     = section("TTL (seconds)") || section("TTL") || "";
-            const values     = linesOf(section("Values (one per line)") || section("Values"));
+            const ttlRaw      = stripMd(section("TTL (seconds)") || section("TTL") || "");
+            const values      = linesOf(section("Values (one per line)") || section("Values"));
 
-            const alias_target  = section("Alias target DNS name");
-            const alias_zone_id = section("Alias target hosted zone ID");
-            const alias_eth     = boolOrNull(section("Evaluate target health"));
+            const alias_target  = stripMd(section("Alias target DNS name"));
+            const alias_zone_id = stripMd(section("Alias target hosted zone ID"));
+            const alias_eth_raw = stripMd(section("Evaluate target health"));
+            const alias_eth     = /^true$/i.test(alias_eth_raw) ? true : /^false$/i.test(alias_eth_raw) ? false : null;
 
-            const snow_id    = (section("SNOW Request/Task ID") || "").replace(/\s+/g, "");
+            const snow_id     = stripMd(section("SNOW Request/Task ID"));
 
             // update-only fields
-            const new_name   = section("New record name (optional, update)");
-            const new_type   = (section("New type (optional, update)") || "").toUpperCase();
-            const new_ttl    = section("New TTL (optional, update)");
-            const new_values = linesOf(section("New values (optional, update)"));
+            const new_name_raw   = section("New record name (optional, update)");
+            const new_type_raw   = section("New type (optional, update)");
+            const new_ttl_raw    = section("New TTL (optional, update)");
+            const new_values     = linesOf(section("New values (optional, update)"));
 
-            const new_alias_target  = section("New alias target (optional, update)");
-            const new_alias_zone_id = section("New alias hosted zone ID (optional, update)");
-            const new_alias_eth     = (section("New alias evaluate_target_health (optional, update)") || "").toLowerCase();
+            const new_alias_target  = stripMd(section("New alias target (optional, update)"));
+            const new_alias_zone_id = stripMd(section("New alias hosted zone ID (optional, update)"));
+            const new_alias_eth_raw = stripMd(section("New alias evaluate_target_health (optional, update)"));
 
             // normalize names
+            const zone = stripMd(zoneRaw);
             const fqdn = fqdnName(zone, nameInput);
 
-            // CREATE payload -> dns-create-main.yml
+            // CREATE payload
             const createPayload = {
               action: "create",
               zone: ensureDot(zone),
@@ -102,43 +109,43 @@ jobs:
               snow_id
             };
             if (createPayload.variant === "alias") {
-              createPayload.alias_target = ensureDot(alias_target || "");
-              createPayload.alias_zone_id = (alias_zone_id || "").trim();
-              createPayload.alias_eth = !!alias_eth;
+              if (!emptyish(alias_target))  createPayload.alias_target = ensureDot(alias_target);
+              if (!emptyish(alias_zone_id)) createPayload.alias_zone_id = alias_zone_id;
+              if (alias_eth !== null)       createPayload.alias_eth = alias_eth;
             } else {
               if (/^\d+$/.test(ttlRaw)) createPayload.ttl = parseInt(ttlRaw, 10);
-              createPayload.values = values;
+              if (values.length) createPayload.values = values;
             }
 
-            // UPDATE spec -> dns-update.yml
+            // UPDATE spec
             const changes = {};
+            const new_name = emptyish(new_name_raw) ? "" : stripMd(new_name_raw);
+            const new_type = emptyish(new_type_raw) ? "" : stripMd(new_type_raw).toUpperCase();
+            const new_ttl  = emptyish(new_ttl_raw)  ? "" : stripMd(new_ttl_raw);
+
             if (new_name) changes.name = fqdnName(zone, new_name);
             if (new_type) changes.type = new_type;
             if (/^\d+$/.test(new_ttl)) changes.ttl = parseInt(new_ttl, 10);
             if (new_values && new_values.length) changes.records = new_values;
 
-            // If caller wants to switch/add alias during update
-            const aliasVariantChosen = (variant === "alias");
-            const anyNewAlias = new_alias_target || new_alias_zone_id || new_alias_eth;
-            if (aliasVariantChosen || anyNewAlias) {
+            // switching/setting alias on update
+            const anyNewAlias = !!(new_alias_target || new_alias_zone_id || new_alias_eth_raw);
+            if (anyNewAlias) {
               const alias = {};
-              const tgt = (new_alias_target || alias_target || "").trim();
-              const zid = (new_alias_zone_id || alias_zone_id || "").trim();
-              const ethRaw = new_alias_eth || (alias_eth === true ? "true" : alias_eth === false ? "false" : "");
-              if (tgt) alias.name = ensureDot(tgt);
-              if (zid) alias.zone_id = zid;
-              if (ethRaw) alias.evaluate_target_health = /^true$/i.test(ethRaw);
+              if (!emptyish(new_alias_target))  alias.name = ensureDot(new_alias_target);
+              if (!emptyish(new_alias_zone_id)) alias.zone_id = new_alias_zone_id;
+              if (!emptyish(new_alias_eth_raw)) alias.evaluate_target_health = /^true$/i.test(new_alias_eth_raw);
               if (Object.keys(alias).length) changes.alias = alias;
             }
 
             const updateSpec = {
               zone: ensureDot(zone),
-              name: fqdn,
-              type: currentType,  // CURRENT type in TF
+              name: fqdn,               // CURRENT name
+              type: currentType,        // CURRENT type
               changes
             };
 
-            // minimal validation
+            // validation
             const missing = [];
             if (!snow_id) missing.push("snow_id");
             if (!zone) missing.push("zone");
@@ -147,21 +154,20 @@ jobs:
 
             if (action === "create") {
               if (createPayload.variant === "alias") {
-                if (!createPayload.alias_target) missing.push("alias_target");
+                if (!createPayload.alias_target)  missing.push("alias_target");
                 if (!createPayload.alias_zone_id) missing.push("alias_zone_id");
-              } else if (!values.length) {
+              } else if (!createPayload.values?.length) {
                 missing.push("values");
               }
             } else if (action === "update") {
               if (!Object.keys(changes).length) {
-                // Nothing to change -> fail early
-                missing.push("at least one change (new_* fields or alias fields)");
+                missing.push("at least one change (new_* or new alias fields)");
               }
             }
 
             if (missing.length) {
               core.setFailed("Missing required fields: " + missing.join(", "));
-              core.info("Raw body for debugging follows:");
+              core.info("Raw body below for debugging:");
               core.info(body);
               return;
             }
