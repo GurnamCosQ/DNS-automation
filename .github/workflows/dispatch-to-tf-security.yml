@@ -1,4 +1,4 @@
-name: Dispatch DNS Create to tf-security
+name: Dispatch DNS Create/Update to tf-security
 
 on:
   issues:
@@ -10,6 +10,7 @@ permissions:
 jobs:
   dispatch:
     runs-on: ubuntu-latest
+
     steps:
       - name: Debug event
         run: |
@@ -17,95 +18,182 @@ jobs:
           echo "issue_number=${{ github.event.issue.number }}"
           echo "issue_title=${{ github.event.issue.title }}"
 
-      - name: Build payload from Issue Form body
+      - name: Build payloads from Issue Form
         id: build
         uses: actions/github-script@v7
         with:
           script: |
             const body = context.payload.issue.body || "";
-      
-            // Grab text under "### <label>" until the next "###" (or EOF)
-            function pick(label) {
+
+            // --- helpers ---
+            function section(label) {
               const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-              const rx = new RegExp(
-                `(^|\\r?\\n)###\\s*${esc}\\s*\\r?\\n([\\s\\S]*?)(?=\\r?\\n###\\s|$)`,
-                'i'
-              );
+              const rx = new RegExp(`(^|\\r?\\n)###\\s*${esc}\\s*\\r?\\n([\\s\\S]*?)(?=\\r?\\n###\\s|$)`, 'i');
               const m = body.match(rx);
               let v = (m && m[2].trim()) || "";
               if (/^(no response|none)$/i.test(v)) v = "";
               return v;
             }
-      
-            // Remove ```lang and trailing ``` if present
             function unfence(s) {
               if (!s) return s;
               const lines = s.split(/\r?\n/);
               if (lines[0] && lines[0].startsWith("```")) lines.shift();
-              while (lines.length && lines[lines.length - 1].trim() === "```") lines.pop();
+              while (lines.length && lines[lines.length-1].trim() === "```") lines.pop();
               return lines.join("\n").trim();
             }
-      
-            const action   = (pick("Action") || "create").toLowerCase();
-            const zone     = pick("Zone (must end with a dot)") || pick("Zone") || "";
-            const name     = pick("Record name (relative or FQDN)") || pick("Record name") || "";
-            const type     = (pick("Type") || "").toUpperCase();
-            const variant  = (pick("Record variant") || "standard").toLowerCase();
-            const ttlRaw   = pick("TTL (seconds)") || pick("TTL");
-      
-            // Values may be fenced; unfence first, then split lines
-            const valuesText = unfence(pick("Values (one per line)") || pick("Values") || "");
-            const values = valuesText.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-      
-            const alias_target   = pick("Alias target DNS name");
-            const alias_zone_id  = pick("Alias target hosted zone ID");
-            const alias_eth_raw  = pick("Evaluate target health");
-            const alias_eth      = /^true$/i.test(alias_eth_raw);
-      
-            const snow_id = (pick("SNOW Request/Task ID") || "").replace(/\s+/g, "");
-      
-            const payload = { action, zone, name, type, variant, snow_id };
-            if (variant === "alias") {
-              payload.alias_target = alias_target;
-              payload.alias_zone_id = alias_zone_id;
-              payload.alias_eth = alias_eth;
+            function linesOf(s) {
+              return unfence(s || "").split(/\r?\n/).map(t => t.trim()).filter(Boolean);
+            }
+            function boolOrNull(s) {
+              if (!s) return null;
+              if (/^true$/i.test(s)) return true;
+              if (/^false$/i.test(s)) return false;
+              return null;
+            }
+            function ensureDot(s) {
+              if (!s) return s;
+              return s.endsWith(".") ? s : s + ".";
+            }
+            function fqdnName(zone, name) {
+              const z = ensureDot(zone || "");
+              const n = (name || "").trim();
+              if (!n) return n;
+              if (n.endsWith(".")) return n;                 // already FQDN
+              if (n.includes(".")) return n + ".";           // looks FQDN but missing dot
+              return n + "." + z;                            // relative -> append zone
+            }
+
+            // --- gather inputs ---
+            const action     = (section("Action") || "create").toLowerCase();
+            const zone       = section("Zone (must end with a dot)") || section("Zone") || "";
+            const nameInput  = section("Record name (relative or FQDN)") || section("Record name") || "";
+            const currentType= (section("Type (CURRENT type for updates)") || section("Type") || "").toUpperCase();
+            const variant    = (section("Variant (create) / New variant (update, optional)") || section("Record variant") || "standard").toLowerCase();
+
+            const ttlRaw     = section("TTL (seconds)") || section("TTL") || "";
+            const values     = linesOf(section("Values (one per line)") || section("Values"));
+
+            const alias_target  = section("Alias target DNS name");
+            const alias_zone_id = section("Alias target hosted zone ID");
+            const alias_eth     = boolOrNull(section("Evaluate target health"));
+
+            const snow_id    = (section("SNOW Request/Task ID") || "").replace(/\s+/g, "");
+
+            // update-only fields
+            const new_name   = section("New record name (optional, update)");
+            const new_type   = (section("New type (optional, update)") || "").toUpperCase();
+            const new_ttl    = section("New TTL (optional, update)");
+            const new_values = linesOf(section("New values (optional, update)"));
+
+            const new_alias_target  = section("New alias target (optional, update)");
+            const new_alias_zone_id = section("New alias hosted zone ID (optional, update)");
+            const new_alias_eth     = (section("New alias evaluate_target_health (optional, update)") || "").toLowerCase();
+
+            // normalize names
+            const fqdn = fqdnName(zone, nameInput);
+
+            // CREATE payload -> dns-create-main.yml
+            const createPayload = {
+              action: "create",
+              zone: ensureDot(zone),
+              name: fqdn,
+              type: currentType,
+              variant: variant || "standard",
+              snow_id
+            };
+            if (createPayload.variant === "alias") {
+              createPayload.alias_target = ensureDot(alias_target || "");
+              createPayload.alias_zone_id = (alias_zone_id || "").trim();
+              createPayload.alias_eth = !!alias_eth;
             } else {
-              if (ttlRaw && /^\d+$/.test(ttlRaw)) payload.ttl = parseInt(ttlRaw, 10);
-              payload.values = values;
+              if (/^\d+$/.test(ttlRaw)) createPayload.ttl = parseInt(ttlRaw, 10);
+              createPayload.values = values;
             }
-      
-            // Minimal validation
+
+            // UPDATE spec -> dns-update.yml
+            const changes = {};
+            if (new_name) changes.name = fqdnName(zone, new_name);
+            if (new_type) changes.type = new_type;
+            if (/^\d+$/.test(new_ttl)) changes.ttl = parseInt(new_ttl, 10);
+            if (new_values && new_values.length) changes.records = new_values;
+
+            // If caller wants to switch/add alias during update
+            const aliasVariantChosen = (variant === "alias");
+            const anyNewAlias = new_alias_target || new_alias_zone_id || new_alias_eth;
+            if (aliasVariantChosen || anyNewAlias) {
+              const alias = {};
+              const tgt = (new_alias_target || alias_target || "").trim();
+              const zid = (new_alias_zone_id || alias_zone_id || "").trim();
+              const ethRaw = new_alias_eth || (alias_eth === true ? "true" : alias_eth === false ? "false" : "");
+              if (tgt) alias.name = ensureDot(tgt);
+              if (zid) alias.zone_id = zid;
+              if (ethRaw) alias.evaluate_target_health = /^true$/i.test(ethRaw);
+              if (Object.keys(alias).length) changes.alias = alias;
+            }
+
+            const updateSpec = {
+              zone: ensureDot(zone),
+              name: fqdn,
+              type: currentType,  // CURRENT type in TF
+              changes
+            };
+
+            // minimal validation
             const missing = [];
-            if (!payload.zone)  missing.push("zone");
-            if (!payload.name)  missing.push("name");
-            if (!payload.type)  missing.push("type");
-            if (!payload.snow_id) missing.push("snow_id");
-            if (variant === "alias") {
-              if (!payload.alias_target)  missing.push("alias_target");
-              if (!payload.alias_zone_id) missing.push("alias_zone_id");
-            } else if (!payload.values?.length) {
-              missing.push("values");
+            if (!snow_id) missing.push("snow_id");
+            if (!zone) missing.push("zone");
+            if (!nameInput) missing.push("name");
+            if (!currentType) missing.push("type");
+
+            if (action === "create") {
+              if (createPayload.variant === "alias") {
+                if (!createPayload.alias_target) missing.push("alias_target");
+                if (!createPayload.alias_zone_id) missing.push("alias_zone_id");
+              } else if (!values.length) {
+                missing.push("values");
+              }
+            } else if (action === "update") {
+              if (!Object.keys(changes).length) {
+                // Nothing to change -> fail early
+                missing.push("at least one change (new_* fields or alias fields)");
+              }
             }
+
             if (missing.length) {
               core.setFailed("Missing required fields: " + missing.join(", "));
-              core.info("Raw body for debugging below:");
+              core.info("Raw body for debugging follows:");
               core.info(body);
               return;
             }
-      
-            core.info("Payload to send: " + JSON.stringify(payload));
-            core.setOutput("payload", JSON.stringify(payload));
 
-      - name: Dispatch workflow in tf-security
+            core.setOutput("action", action);
+            core.setOutput("payload_json", JSON.stringify(createPayload));
+            core.setOutput("spec_json", JSON.stringify(updateSpec));
+
+      - name: Dispatch to tf-security (CREATE)
+        if: steps.build.outputs.action == 'create'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.TFSEC_WORKFLOW_TOKEN }}
           script: |
-            const owner = context.repo.owner;   // same owner as form repo; change if needed
-            const repo  = 'tf-security';        // target repo
-            const workflow_id = 'dns-create-main.yml';
             await github.rest.actions.createWorkflowDispatch({
-              owner, repo, workflow_id,
+              owner: context.repo.owner,
+              repo: 'tf-security',
+              workflow_id: 'dns-create-main.yml',
               ref: 'main',
-              inputs: { payload_json: '${{ steps.build.outputs.payload }}' }
+              inputs: { payload_json: ${{ toJSON(steps.build.outputs.payload_json) }} }
+            });
+
+      - name: Dispatch to tf-security (UPDATE)
+        if: steps.build.outputs.action == 'update'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.TFSEC_WORKFLOW_TOKEN }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: 'tf-security',
+              workflow_id: 'dns-update.yml',   // change if your filename differs
+              ref: 'main',
+              inputs: { spec_json: ${{ toJSON(steps.build.outputs.spec_json) }} }
             });
