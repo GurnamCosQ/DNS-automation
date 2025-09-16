@@ -4,6 +4,18 @@ title: "[POC DNS] <create|update> <type> <name> in <zone>"
 labels: ["dns", "poc"]
 assignees: []
 body:
+  - type: markdown
+    attributes:
+      value: |
+        ## How this form works
+        - **Choose an Action** below: **create** or **update**.
+        - Fill the **Target** section (Zone, Name, Type).  
+          - For **update**, *Type must be the **current** type* in Terraform.
+        - For **create**, use the **Create fields** (`TTL`, `Values` **or** `Alias`).
+        - For **update**, use the **Update-only fields** (`new_*`) to change things.  
+          - Leave any **new_*** field **blank** to keep it unchanged.
+        - **Do not type** “No response” — just leave fields empty. (We treat empty fields as “don’t change”.)
+
   - type: input
     id: snow_id
     attributes:
@@ -22,7 +34,17 @@ body:
     validations:
       required: true
 
-  # ---- Target (existing or new) ----
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## Target (existing or new)
+        These identify the record:
+        - **Zone** must be an FQDN with a trailing dot (e.g., `example.com.`).
+        - **Record name** may be relative (`www`) or FQDN (`www.example.com.`).  
+          Relative names will be resolved under the Zone.
+        - **Type** is the **current** type for updates.
+
   - type: input
     id: zone
     attributes:
@@ -59,7 +81,21 @@ body:
     validations:
       required: true
 
-  # ---- Fields for CREATE (standard) OR UPDATE (new values) ----
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## Create fields (or baseline values)
+        Use these when **creating** a standard record, or to provide baseline values.
+        - **TTL** (seconds). Leave blank for Alias records (TTL not used with Alias).
+        - **Values** (one per line).  
+          - **A/AAAA:** one IP per line  
+          - **CNAME:** single FQDN target (e.g., `target.example.net.`)  
+          - **MX:** `priority host.` (e.g., `10 mail.example.com.`)  
+          - **TXT:** one string per line  
+          - **NS:** one nameserver per line, with trailing dot
+        - **Alias** (A/AAAA only): provide target DNS name, target hosted zone ID, and whether to evaluate target health.
+
   - type: input
     id: ttl
     attributes:
@@ -83,7 +119,6 @@ body:
     validations:
       required: false
 
-  # ---- ALIAS (create or update) ----
   - type: input
     id: alias_target
     attributes:
@@ -107,11 +142,20 @@ body:
     attributes:
       label: Evaluate target health
       options: ["false","true"]
-      description: "Route 53 alias setting: evaluate_target_health."
     validations:
       required: false
 
-  # ---- UPDATE-ONLY (optional change fields) ----
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## Update-only fields (leave blank to keep existing)
+        Use these **only when Action = update**.  
+        - This is a **merge** update: fields you fill here will be changed; everything else remains as-is.
+        - To change to **CNAME**, provide **New type = CNAME** and a **single** New value.
+        - To switch to **Alias**, provide **New alias target** and **New alias hosted zone ID** (A/AAAA only).
+        - **Do not type** “No response”. Just leave fields blank if you’re not changing them.
+
   - type: input
     id: new_name
     attributes:
@@ -143,7 +187,7 @@ body:
     id: new_values
     attributes:
       label: New values (optional, update)
-      description: "Values to replace existing 'records' (one per line)."
+      description: "Values to replace existing 'records' (one per line). Leave blank to keep current values."
       render: text
     validations:
       required: false
@@ -153,7 +197,7 @@ body:
     attributes:
       label: New alias target (optional, update)
       placeholder: d111111abcdef8.cloudfront.net.
-      description: "Supply with new alias_zone_id if switching to alias."
+      description: "Supply with new alias_zone_id if switching to alias (A/AAAA only)."
     validations:
       required: false
 
@@ -162,7 +206,7 @@ body:
     attributes:
       label: New alias hosted zone ID (optional, update)
       placeholder: Z2FDTNDATAQYW2
-      description: "Required if switching to alias."
+      description: "Required if switching to alias (A/AAAA only)."
     validations:
       required: false
 
@@ -173,6 +217,17 @@ body:
       options: ["", "false","true"]
     validations:
       required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ### Notes & rules
+        - **Alias is A/AAAA only.** If you supply an alias, `records` and `ttl` will be ignored/removed.
+        - **CNAME requires exactly one value.** (e.g., `edge.example.net.`)
+        - **Trailing dot**: use it for FQDNs (e.g., `example.com.`). Relative names are supported.
+        - **No routing policies** (weighted, failover) in this POC.
+        - We’ll open a PR with the change if validation passes.
 
   - type: textarea
     id: justification
