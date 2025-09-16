@@ -18,10 +18,11 @@ body:
     attributes:
       label: Action
       options: ["create","update"]
-      description: "We’ll implement Create first; Update follows later."
+      description: "Choose 'create' to add a record, 'update' to modify an existing one."
     validations:
       required: true
 
+  # ---- Target (existing or new) ----
   - type: input
     id: zone
     attributes:
@@ -36,29 +37,29 @@ body:
     attributes:
       label: Record name (relative or FQDN)
       placeholder: www
-      description: "Use relative (e.g., www) or FQDN (e.g., www.example.com.)."
+      description: "Relative (e.g., www) or FQDN (e.g., www.example.com.)."
     validations:
       required: true
 
   - type: dropdown
     id: type
     attributes:
-      label: Type
+      label: Type (CURRENT type for updates)
       options: ["A","AAAA","CNAME","MX","TXT","NS"]
-      description: "Alias is only valid with A/AAAA."
+      description: "For update, this is the CURRENT type in TF."
     validations:
       required: true
 
   - type: dropdown
     id: variant
     attributes:
-      label: Record variant
+      label: Variant (create) / New variant (update, optional)
       options: ["standard","alias"]
-      description: "Choose 'alias' for ALB/CloudFront/etc. targets (A/AAAA only)."
+      description: "Alias is valid only for A/AAAA."
     validations:
       required: true
 
-  # ----- STANDARD FIELDS -----
+  # ---- Fields for CREATE (standard) OR UPDATE (new values) ----
   - type: input
     id: ttl
     attributes:
@@ -74,15 +75,15 @@ body:
       label: Values (one per line)
       description: |
         A/AAAA: one IP per line
-        CNAME: single FQDN ending with a dot (e.g., target.example.net.)
+        CNAME: single FQDN (e.g., target.example.net.)
         MX: one per line as "priority host." (e.g., 10 mail.example.com.)
-        TXT: one string per line (SPF/DKIM)
-        NS: one nameserver per line, FQDN with trailing dot
+        TXT: one string per line
+        NS: one nameserver per line (with trailing dot)
       render: text
     validations:
       required: false
 
-  # ----- ALIAS FIELDS -----
+  # ---- ALIAS (create or update) ----
   - type: input
     id: alias_target
     attributes:
@@ -110,9 +111,71 @@ body:
     validations:
       required: false
 
+  # ---- UPDATE-ONLY (optional change fields) ----
+  - type: input
+    id: new_name
+    attributes:
+      label: New record name (optional, update)
+      placeholder: api-v2
+      description: "Leave blank to keep the same name."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: new_type
+    attributes:
+      label: New type (optional, update)
+      options: ["", "A","AAAA","CNAME","MX","TXT","NS"]
+      description: "Leave blank to keep the same type."
+    validations:
+      required: false
+
+  - type: input
+    id: new_ttl
+    attributes:
+      label: New TTL (optional, update)
+      placeholder: "60"
+      description: "Leave blank to keep the same TTL."
+    validations:
+      required: false
+
+  - type: textarea
+    id: new_values
+    attributes:
+      label: New values (optional, update)
+      description: "Values to replace existing 'records' (one per line)."
+      render: text
+    validations:
+      required: false
+
+  - type: input
+    id: new_alias_target
+    attributes:
+      label: New alias target (optional, update)
+      placeholder: d111111abcdef8.cloudfront.net.
+      description: "Supply with new alias_zone_id if switching to alias."
+    validations:
+      required: false
+
+  - type: input
+    id: new_alias_zone_id
+    attributes:
+      label: New alias hosted zone ID (optional, update)
+      placeholder: Z2FDTNDATAQYW2
+      description: "Required if switching to alias."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: new_alias_eth
+    attributes:
+      label: New alias evaluate_target_health (optional, update)
+      options: ["", "false","true"]
+    validations:
+      required: false
+
   - type: textarea
     id: justification
     attributes:
       label: Business justification (optional)
       render: text
- 
