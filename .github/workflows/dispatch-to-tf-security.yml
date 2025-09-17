@@ -34,9 +34,13 @@ jobs:
               return v;
             }
             function stripMd(s) {
-              return (s || "").replace(/```[\s\S]*?```/g, "")  // strip fenced blocks entirely
-                              .replace(/[`*_~]/g, "")          // remove md emphasis/backticks/tilde
-                              .trim();
+                return (s || "").replace(/```[\s\S]*?```/g, "")  // strip fenced blocks entirely
+                  .replace(/\*\*(.*?)\*\*/g, "$1") // **bold** -> content
+                  .replace(/\*(.*?)\*/g, "$1")     // *italic* -> content  
+                  .replace(/`([^`]+)`/g, "$1")     // `code` -> content
+                  .replace(/~~(.*?)~~/g, "$1")     // ~~strikethrough~~ -> content
+                  .trim();
+            }
             }
             function emptyish(s) {
               const v = stripMd(s).toLowerCase();
