@@ -34,13 +34,19 @@ jobs:
               return v;
             }
             function stripMd(s) {
-                return (s || "").replace(/```[\s\S]*?```/g, "")  // strip fenced blocks entirely
-                  .replace(/\*\*(.*?)\*\*/g, "$1") // **bold** -> content
-                  .replace(/\*(.*?)\*/g, "$1")     // *italic* -> content  
-                  .replace(/`([^`]+)`/g, "$1")     // `code` -> content
-                  .replace(/~~(.*?)~~/g, "$1")     // ~~strikethrough~~ -> content
-                  .trim();
-            }
+              if (!s) return "";
+              return String(s)
+                // keep fenced content; drop the fences (and optional language tag)
+                .replace(/```(?:[^\n]*\n)?([\s\S]*?)```/g, "$1")
+                // bold **text** -> text
+                .replace(/\*\*(.*?)\*\*/g, "$1")
+                // inline code `text` -> text
+                .replace(/`([^`]+)`/g, "$1")
+                // italic *text* -> text (do NOT add underscores variant)
+                .replace(/\*(.*?)\*/g, "$1")
+                // strikethrough ~~text~~ -> text (doesn't affect single ~ like ~all)
+                .replace(/~~(.*?)~~/g, "$1")
+                .trim();
             }
             function emptyish(s) {
               const v = stripMd(s).toLowerCase();
@@ -183,6 +189,8 @@ jobs:
       - name: Dispatch to tf-security (CREATE)
         if: steps.build.outputs.action == 'create'
         uses: actions/github-script@v7
+        env:
+          PAYLOAD_JSON: ${{ steps.build.outputs.payload_json }}
         with:
           github-token: ${{ secrets.TFSEC_WORKFLOW_TOKEN }}
           script: |
@@ -191,12 +199,14 @@ jobs:
               repo: 'tf-security',
               workflow_id: 'dns-create-main.yml',
               ref: 'main',
-              inputs: { payload_json: ${{ toJSON(steps.build.outputs.payload_json) }} }
+              inputs: { payload_json: process.env.PAYLOAD_JSON }
             });
 
       - name: Dispatch to tf-security (UPDATE)
         if: steps.build.outputs.action == 'update'
         uses: actions/github-script@v7
+        env:
+          SPEC_JSON: ${{ steps.build.outputs.spec_json }}
         with:
           github-token: ${{ secrets.TFSEC_WORKFLOW_TOKEN }}
           script: |
@@ -205,5 +215,5 @@ jobs:
               repo: 'tf-security',
               workflow_id: 'dns-update.yml',   // change if your filename differs
               ref: 'main',
-              inputs: { spec_json: ${{ toJSON(steps.build.outputs.spec_json) }} }
+              inputs: { spec_json: process.env.SPEC_JSON }
             });
