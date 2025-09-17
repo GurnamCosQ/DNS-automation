@@ -49,8 +49,12 @@ jobs:
                 .trim();
             }
             function emptyish(s) {
-              const v = stripMd(s).toLowerCase();
-              return !v || ["no response","none","n/a","na","null"].includes(v);
+              const raw = stripMd(s);
+              const v = (raw == null ? "" : String(raw)).trim();
+              if (!v) return true;
+              // handle GitHub Issue Forms’ italicized sentinel: _No response_
+              const plain = v.replace(/^_+|_+$/g, "").trim().toLowerCase();
+              return ["no response","none","n/a","na","null"].includes(plain);
             }
             function unfence(s) {
               if (!s) return s;
