@@ -156,6 +156,7 @@ jobs:
               zone: ensureDot(zone),
               name: fqdn,               // CURRENT name
               type: currentType,        // CURRENT type
+              snow_id,
               changes
             };
 
