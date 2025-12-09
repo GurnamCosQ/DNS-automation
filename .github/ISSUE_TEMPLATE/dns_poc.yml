@@ -1,7 +1,7 @@
-name: "DNS POC (Single)"
-description: "Create/Update a Route 53 record (supports Alias)"
-title: "[POC DNS] <create|update> <type> <name> in <zone>"
-labels: ["dns", "poc"]
+name: "DNS Automation"
+description: "Create/Update a Route 53 records"
+title: "Route 53 DNS Automation"
+labels: ["dns"]
 assignees: []
 body:
   - type: markdown
@@ -183,11 +183,25 @@ body:
     validations:
       required: false
 
+  # NEW: mode selector (replace vs append) for updates
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode (update records behaviour)
+      options: ["replace","append"]
+      description: >
+        How to handle record values when updating:
+        'replace' overwrites the existing records set,
+        'append' keeps existing values and adds the new ones at the end.
+        Used only when Action = update and New values are provided.
+    validations:
+      required: false
+
   - type: textarea
     id: new_values
     attributes:
       label: New values (optional, update)
-      description: "Values to replace existing 'records' (one per line). Leave blank to keep current values."
+      description: "Values to replace or append to existing 'records' (one per line). Leave blank to keep current values."
       render: text
     validations:
       required: false
