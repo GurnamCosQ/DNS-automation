@@ -42,7 +42,7 @@ jobs:
                 .replace(/\*\*(.*?)\*\*/g, "$1")
                 // inline code `text` -> text
                 .replace(/`([^`]+)`/g, "$1")
-                // italic *text* -> text (do NOT add underscores variant)
+                // italic *text* -> text 
                 .replace(/\*(.*?)\*/g, "$1")
                 // strikethrough ~~text~~ -> text (doesn't affect single ~ like ~all)
                 .replace(/~~(.*?)~~/g, "$1")
@@ -109,6 +109,13 @@ jobs:
             const new_alias_zone_id = stripMd(section("New alias hosted zone ID (optional, update)"));
             const new_alias_eth_raw = stripMd(section("New alias evaluate_target_health (optional, update)"));
 
+            // NEW: mode for update records behaviour
+            const mode_raw  = stripMd(section("Mode (update records behaviour)"));
+            let value_mode  = "replace";
+            if (/^append$/i.test(mode_raw)) {
+              value_mode = "append";
+            }
+
             // normalize names
             const zone = stripMd(zoneRaw);
             const fqdn = fqdnName(zone, nameInput);
@@ -131,7 +138,7 @@ jobs:
               if (values.length) createPayload.values = values;
             }
 
-            // UPDATE spec
+            // UPDATE spec Payload
             const changes = {};
             const new_name = emptyish(new_name_raw) ? "" : stripMd(new_name_raw);
             const new_type = emptyish(new_type_raw) ? "" : stripMd(new_type_raw).toUpperCase();
@@ -157,6 +164,7 @@ jobs:
               name: fqdn,               // CURRENT name
               type: currentType,        // CURRENT type
               snow_id,
+              value_mode,               // <-- new: replace/append from the form
               changes
             };
 
