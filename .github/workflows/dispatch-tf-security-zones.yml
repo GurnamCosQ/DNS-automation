@@ -17,8 +17,7 @@ jobs:
       - name: Parse issue form + dispatch tf-security workflow
         uses: actions/github-script@v7
         with:
-          # PAT needed to dispatch workflow in a different repo
-          github-token: ${{ secrets.TF_SECURITY_DISPATCH_PAT }}
+          github-token: ${{ secrets.TFSEC_WORKFLOW_TOKEN }}
           script: |
             const issue = context.payload.issue;
             const body  = issue.body || "";
