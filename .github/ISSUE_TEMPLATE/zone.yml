@@ -1,0 +1,81 @@
+name: Hosted Zone Onboarding
+description: Add a new Route 53 hosted zone to Terraform, then (after merge) generate the zone file used by record automations.
+title: "[ZONE] <domain> - <step>"
+labels:
+  - dns
+  - hosted-zone
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue form supports **two steps**. Run **Step 1**, merge the PR (to actually create the zone), then come back and run **Step 2**.
+
+        **Naming convention used by the bot**
+        - Zone: `example.com` (or `example.com.`)
+        - Label: `example-com` (dots replaced with hyphens)
+        - The bot will normalize trailing dots as needed.
+
+  - type: dropdown
+    id: step
+    attributes:
+      label: Step to run
+      description: Choose which operation the automation should perform.
+      options:
+        - "1 - Append domain to zones-allzones.tf (create hosted zone)"
+        - "2 - Create zone file with aws_route53_zone data block (for record automations)"
+    validations:
+      required: true
+
+  - type: input
+    id: zone
+    attributes:
+      label: Zone domain
+      description: The hosted zone name (with or without a trailing dot).
+      placeholder: "bwpmillwork.com"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: private_zone
+    attributes:
+      label: Private zone?
+      description: Set to true for private hosted zones, false for public hosted zones.
+      options:
+        - "false"
+        - "true"
+    validations:
+      required: true
+
+  - type: input
+    id: snow_id
+    attributes:
+      label: SNOW ID
+      description: RITM/TASK reference used in PR branch/comment metadata.
+      placeholder: "RITM1234567"
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes (optional)
+      description: Anything the reviewer/bot should be aware of.
+      placeholder: "Any relevant context..."
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        ### Step 2 reminder
+        Only run **Step 2** after the PR from **Step 1** is merged and the hosted zone exists.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: "If running Step 2, I confirm Step 1 has been merged already."
+          required: false
+        - label: "I confirm the zone name is correct and belongs in this repo."
+          required: true
