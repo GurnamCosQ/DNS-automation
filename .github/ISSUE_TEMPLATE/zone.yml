@@ -2,7 +2,6 @@ name: Hosted Zone Onboarding
 description: Add a new Route 53 hosted zone to Terraform, then (after merge) generate the zone file used by record automations.
 title: "[ZONE] <domain> - <step>"
 labels:
-  - dns
   - hosted-zone
 body:
   - type: markdown
