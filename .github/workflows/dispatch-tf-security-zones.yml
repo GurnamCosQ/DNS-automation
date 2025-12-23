@@ -10,7 +10,7 @@ permissions:
 jobs:
   dispatch:
     runs-on: ubuntu-latest
-    if: contains(github.event.issue.labels.*.name, 'hosted-zone')
+    if: contains(github.event.issue.body, '### Step to run')
     
     steps:
       - name: Parse issue form + dispatch tf-security workflow
