@@ -2,7 +2,7 @@ name: Hosted Zone Onboarding (Dispatch to tf-security)
 
 on:
   issues:
-    types: [opened, edited, labeled]
+    types: [labeled]
 
 permissions:
   contents: read
