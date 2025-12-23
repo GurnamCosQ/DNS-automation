@@ -2,17 +2,16 @@ name: Hosted Zone Onboarding (Dispatch to tf-security)
 
 on:
   issues:
-    types: [labeled]
+    types: [opened,edited,labeled]
 
 permissions:
   contents: read
 
 jobs:
   dispatch:
-    # Only run for issues created by the Hosted Zone Onboarding form (it applies the hosted-zone label)
-    if: contains(github.event.issue.body, '### Step to run')
     runs-on: ubuntu-latest
-
+    if: contains(github.event.issue.labels.*.name, 'hosted-zone')
+    
     steps:
       - name: Parse issue form + dispatch tf-security workflow
         uses: actions/github-script@v7
