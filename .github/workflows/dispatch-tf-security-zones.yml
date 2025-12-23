@@ -10,9 +10,7 @@ permissions:
 jobs:
   dispatch:
     # Only run for issues created by the Hosted Zone Onboarding form (it applies the hosted-zone label)
-    if: |
-      github.event.issue && 
-      contains(github.event.issue.labels.*.name, 'hosted-zone')
+    if: contains(github.event.issue.body, '### Step to run')
     runs-on: ubuntu-latest
 
     steps:
