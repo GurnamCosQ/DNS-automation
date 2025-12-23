@@ -2,7 +2,7 @@ name: Hosted Zone Onboarding (Dispatch to tf-security)
 
 on:
   issues:
-    types: [opened, edited]
+    types: [opened, edited, labeled]
 
 permissions:
   contents: read
@@ -10,7 +10,7 @@ permissions:
 jobs:
   dispatch:
     # Only run for issues created by the Hosted Zone Onboarding form (it applies the hosted-zone label)
-    if: contains(join(github.event.issue.labels.*.name, ','), 'hosted-zone')
+    if: contains(github.event.issue.labels.*.name, 'hosted-zone')
     runs-on: ubuntu-latest
 
     steps:
