@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   dispatch:
-    if: contains(join(github.event.issue.labels.*.name, ','), 'dns')
+    if: contains(github.event.issue.body, '### Action')
     runs-on: ubuntu-latest
 
     steps:
