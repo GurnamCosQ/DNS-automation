@@ -49,7 +49,7 @@ jobs:
             const private_zone = (privateRaw.trim().toLowerCase() === "true") ? "true" : "false";
             const snow_id = snowIdRaw.trim();
 
-            const owner = "MarkAnthonyGroup2";   // <- change if needed
+            const owner = "GurnamCosQ";   // <- change if needed
             const repo  = "tf-security";         // <- target repo
             const workflowFile = "hosted-zone-bot.yml"; // <- target workflow filename
 
